@@ -1,0 +1,133 @@
+---
+title: "icpms_metals_urine"
+author: "Puvvula"
+date: "2023-04-27"
+output: pdf_document
+---
+
+```{r}
+library(pacman)
+pacman::p_load(tidyverse, janitor)
+path <- "/Users/jpuvvula/Documents/PEACH_study/icpms_metals/"
+```
+
+```{r}
+raw<- read_csv(paste0(path, "raw_met_urine.csv")) |>
+  mutate(elem_ist_rat=round(as.numeric(element/ist), 4))
+```
+
+```{r}
+# Define function to build linear models for each unique value of the 'metal' variable
+lm_metals <- function(data) {
+  # Create an empty data frame to store results
+  results <- data.frame(metal = character(),
+                        intercept = numeric(),
+                        estimate = numeric(),
+                        r_squared = numeric(),
+                        stringsAsFactors = FALSE)
+  
+  # Get unique values of the 'metal' variable
+  unique_metals <- unique(data$metal)
+  
+  # Loop through each unique value of the 'metal' variable
+  for (i in seq_along(unique_metals)) {
+    # Extract data for the current metal
+    metal_data <- subset(data, metal == unique_metals[i])
+    
+    # Build linear model for the current metal
+    lm_fit <- lm(elem_ist_rat ~ act_std, data = metal_data)
+    
+    # Extract intercept, coefficient, and R-squared value and round to 2 decimal places
+    intercept <- round(coef(lm_fit)[1], 4)
+    estimate <- round(coef(lm_fit)[2], 4)
+    r_squared <- round(summary(lm_fit)$r.squared, 4)
+    
+    # Add results to data frame
+    results[i, ] <- c(unique_metals[i], intercept, estimate, r_squared)
+  }
+  
+  # Return results
+  return(results)
+}
+
+```
+
+```{r}
+results <- lm_metals(raw)
+```
+
+```{r}
+# Convert metals variable in raw to factor
+raw$metal <- factor(raw$metal)
+
+# Convert metals variable in results to factor
+results <- results |>
+  mutate(metal = factor(metal),
+         intercept = as.numeric(intercept),
+         estimate = as.numeric(estimate))
+
+
+raw_n <- raw |> 
+  left_join(results, by = "metal") |>  
+  mutate(cal_conc = as.numeric(if_else(is.na(intercept) | is.na(estimate), 
+                                              NA_real_, 
+                                              (elem_ist_rat - intercept) / estimate)), 
+         diff_act_calc = as.numeric(((cal_conc - act_std) / act_std) * 100)) |> 
+  select(-c(intercept, estimate, r_squared))
+
+write_csv(raw_n, paste0(path, "raw_calculations.csv"))
+```
+
+
+```{r}
+ggplot(raw, aes(x = elem_ist_rat, y = act_std))  +
+  labs(x="Element/ISTD  Area RATIO", 
+       y="Calculated conc (from cal curve)")+
+  facet_wrap(~ metal, scales = "free") +
+  stat_smooth(method = "lm", se = T, fullrange = TRUE, colour="gray")+
+  geom_point()+
+  theme_minimal()
+```
+
+===================================================
+```{r}
+dat_pred<- read_csv(paste0(path, "metal_for_pred.csv")) |>
+  mutate(elem_ist_rat=round(as.numeric(x/y), 4))|> 
+  left_join(results, by = "metal") |>
+  mutate(cal_conc = as.numeric(if_else(is.na(intercept) | is.na(estimate), 
+                                              NA_real_, 
+                                              (elem_ist_rat - intercept) / estimate)*10)) |>
+  mutate(cal_conc = ifelse(cal_conc < 0, 0, cal_conc))|>
+  select(-c(intercept, estimate, r_squared))
+
+write_csv(dat_pred, paste0(path, "urine_metal_conc.csv"))
+```
+
+
+#summary table
+```{r}
+summary_table <- dat_pred %>%
+  group_by(metal) %>%
+  summarize(
+    average = round(mean(cal_conc), 2),
+    min_conc = round(min(cal_conc), 2),
+    max_conc = round(max(cal_conc), 2),
+    median_conc = round(median(cal_conc), 2),
+    q1_conc = round(quantile(cal_conc, probs = 0.25), 2),
+    q3_conc = round(quantile(cal_conc, probs = 0.75), 2))
+
+
+
+#drop breyllium, sillicon and silver
+dat<- dat_pred |> filter(!metal %in% c("beryllium", "sillicon", "silver"))
+ggplot(dat, aes(x = cal_conc)) +
+    geom_histogram( color = "black", fill = "white") +
+    facet_wrap(~metal, scales = "free") +
+    labs(x = "cal_conc", y = "Frequency") +
+    theme_bw()+
+  labs(x="urine metal concentration in PPB",
+       y="frequency")
+```
+
+
+
