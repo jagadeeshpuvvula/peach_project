@@ -1,0 +1,81 @@
+---
+title: "colin"
+author: "Puvvula"
+date: "2023-04-27"
+output: pdf_document
+---
+
+```{r}
+library(pacman)
+pacman::p_load(tidyverse, janitor)
+path <- "/Users/jpuvvula/Documents/PEACH_study/colin/"
+```
+
+```{r}
+metal<- read_csv(paste0(path, "colin_metal_dat.csv"))|>
+  select(c(1:3,7))|>
+  rename(label="obs")|>
+  mutate(label = str_replace(label, 
+                                 "(\\w)(\\s+)-(\\s+)(\\d)", 
+                                 "\\1-\\4"),
+         label = if_else(str_starts(label, "Urine-"), 
+                         paste0("B5-", str_remove(label, "Urine-")), 
+                         label),
+         label = if_else(str_detect(label, "-[0-9]$"), 
+                         str_replace(label, "-([0-9])$", "-0\\1"), 
+                         label),
+         label = str_replace(label, "\\s*-\\s*", "-"),
+         label = if_else(label == "B5-50", "B6-01", label))
+
+
+metal_linkage<- read_csv(paste0(path, "linkage_metals.csv"))|>
+  select(c(1:4,8,9))
+
+metal_dat<- metal |> left_join(metal_linkage, by="label") |>
+  clean_names()|>
+  mutate(sample_type = if_else(sample_type == 
+                                 "Whole Blood (EDTA)", 
+                               "Whole Blood", sample_type)) |>
+  mutate_if(is.character, as.factor)
+
+#linkage with rita's data
+rita_linkage<- read_csv(paste0(path, "linkage_rita.csv"))|>
+  select(c(1,3)) |>
+  rename(studyid="Ext Participant ID")|>
+  distinct(Participant, studyid, .keep_all = TRUE) |>
+  clean_names()|>
+  mutate(studyid = str_remove(studyid, "^0+"))
+
+#get study_id's and convert to wide format
+metal_fin<- metal_dat |> left_join(rita_linkage, by="participant") |>
+  select(c(2,4,7,8,10))|>
+  clean_names() |>
+  mutate(sample_type = if_else(sample_type == "Whole Blood","Blood", 
+                               sample_type))|>
+  unite(variable, metal, sample_type, visit, sep = "_", remove = FALSE)|>
+  select(c(1,3,6))
+
+metal_fin_wide<- metal_fin |>
+  pivot_wider(names_from = variable, values_from = cal_conc)
+
+write_csv(metal_fin_wide, paste0(path, "colin_metal_wide.csv"))
+```
+
+#questionnaire data
+```{r}
+qn_dat<- read_csv(paste0(path, "analysis_colin.csv"))
+qn_dat$studyid<- as.character(qn_dat$studyid)
+
+dat_qn_met<- full_join(qn_dat, metal_fin_wide, by="studyid")
+
+
+write_csv(dat_qn_met, paste0(path, "colin_dat_qn_met.csv"))
+```
+
+############################################
+```{r}
+dat<- read_csv(paste0(path, "colin_dat_qn_met.csv"))
+```
+
+
+
