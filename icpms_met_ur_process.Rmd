@@ -129,6 +129,8 @@ write_csv(pred_conc_res, paste0(path, "urine_metal_conc.csv"))
 
 #summary table
 ```{r}
+#pred_conc_res <- read_csv(paste0(path, "urine_metal_conc.csv"))
+
 summary_table <- pred_conc_res %>%
   group_by(metal) %>%
   summarize(
