@@ -85,5 +85,21 @@ write_csv(dat_qn_met, paste0(path, "ariel_dat_qn_met.csv"))
 dat<- read_csv(paste0(path, "colin_dat_qn_met.csv"))
 ```
 
+#########################
+```{r}
+library(pacman)
+
+pacman::p_load(tidyverse, janitor, haven, skimr, readr, reshape2, kableExtra, gridExtra)
+path <- "~/Documents/PEACH_study/dep_scale/"
+```
+
+```{r}
+dat_existing<- read_csv(paste0(path, "ariel_dat_qn_met.csv")) 
+dat<- read_csv(paste0(path, "analysis_ariel.csv")) 
+
+dat_with_dep_score<- left_join(dat_existing, dat, by="studyid")
+
+write_csv(dat_with_dep_score, "~/Documents/PEACH_study/clem_raw_dat/ariel_exp_qn_full.csv")
+```
 
 
