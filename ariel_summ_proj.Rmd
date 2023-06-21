@@ -72,7 +72,10 @@ dat_imputed<- dat |>
 
 #correlation coefficients 
 ```{r}
-dat_corr<- dat_imputed |> select(-c(2:16, 18, 34))
+dat_corr<- dat_imputed |> 
+  select(-c(2:16, 18, 34)) |>
+  mutate_at(vars(11:17), ~log10(.+0.0000001)) |>
+  rename_with(~ paste0("log_", .x), 11:17)
 
 corr <- cor(dat_corr, method = "pearson") |>
   melt()
