@@ -7,7 +7,7 @@ output: pdf_document
 
 ```{r}
 library(pacman)
-pacman::p_load(tidyverse, janitor, reshape2)
+pacman::p_load(tidyverse, janitor, reshape2, qgcomp)
 path <- "~/Documents/PEACH_study/ariel_summ/"
 ```
 
@@ -66,7 +66,15 @@ summ<- dat_tbl |>
 ```{r}
 #imputing missing values with minimum values
 dat_imputed<- dat |>
-  mutate(across(where(is.numeric), ~replace(., is.na(.), min(., na.rm = TRUE))))
+  mutate(across(where(is.numeric), ~replace(., is.na(.), min(., na.rm = TRUE))))  |>
+  mutate(highway= as.factor(if_else(is.na(highway), "lt_1mile", highway)),
+         bluespace= as.factor(if_else(is.na(bluespace), "Rarely (< 1 time per month)", bluespace)),
+         sex_infant= as.factor(if_else(is.na(sex_infant), "Male", sex_infant))
+         )
+
+
+
+write_csv(dat_imputed, paste0(path, "imputed_peach.csv"))
 ```
 
 
@@ -93,6 +101,97 @@ ggplot(corr, aes(x = Var1, y = Var2, fill = value)) +
   labs(title = "", x = "", y = "") +
   geom_text(aes(label = round(value, 2)), color = "black", size = 3)+
   guides(fill=FALSE)
+```
+
+#average levels during pregnancy vars 21-33
+```{r}
+dat_mod <- dat_imputed |>
+  mutate(pss_avg = rowMeans(across(starts_with("pss14_")), na.rm = TRUE),
+         bdi_avg = rowMeans(across(starts_with("bdi_")), na.rm = TRUE),
+         resil_avg = rowMeans(across(starts_with("resil_")), na.rm = TRUE),
+         pb_bld = rowMeans(across(starts_with("Pb_Blood")), na.rm = TRUE),
+         mn_bld = rowMeans(across(starts_with("Mn_Blood")), na.rm = TRUE)) |>
+  select(-c(21:28,31,32)) |>
+  mutate(across(c(22, 23, 26:30), ~log10(.+0.0000001)))
+```
+
+#qgcomp function
+```{r}
+qgcomp_func<- function(outcomes, dat, folder_path, mixture) {
+  for(outcome in outcomes){
+    formula <- as.formula(paste(outcome, "~ pss_avg+ bdi_avg+ resil_avg+ pb_bld+ mn_bld+ Pb_Urine_V1+ As_Urine_V1+ Mo_Urine_V1+ ","age + bmi+ pt_parity+ sex_infant+ pt_education+ household_income+ race+ highway+ greenspace+ bluespace+ type_house + year_house"))
+       
+        nb <- qgcomp.noboot(formula, expnms = mixture, data = dat, family= gaussian(), q=4)
+        boot <- qgcomp.boot(formula, expnms = mixture, data = dat, family= gaussian(), q=4, B = 200, seed = 2022)
+        save(nb, file = paste0(folder_path, "/", "nb_", "_", outcome, ".rda"))
+        save(boot, file = paste0(folder_path, "/", "boot_", "_", outcome, ".rda"))
+  }
+}
+```
+
+#get results for metal and stress scale metrics as exposure mixture
+```{r}
+qgcomp_func(outcomes = c("weight_infant", "length_infant", "ga_birth"), 
+            mixture = names(dat_mod[c(22,23,26:30)]),
+            folder_path = path, 
+            dat = dat_mod)
+```
+
+#extract results from rda files
+```{r}
+folder_location <- path
+
+# List files ending with ".rda" in the specified folder
+file_names <- list.files(folder_location, pattern = "\\.rda$")
+
+# create empty data frame to store the results
+results <- data.frame(file = character(),
+                      estimate = numeric(),
+                      lower_ci = numeric(),
+                      upper_ci = numeric(),
+                      stringsAsFactors = FALSE)
+
+#loops through all .rda files and extract estimates, CI & p-values
+for (file_name in file_names) {
+  # load the object from the file
+  load(file.path(folder_location, file_name))
+  # extract the object name using grep or grepl
+  object_name <- ls()[grep("^boot|^nb", ls())]
+  # extract the required information using the summary function and the object name
+  estimate <- get(object_name)$coef["psi1"]
+  CI <- get(object_name)$ci
+  lower_ci <- CI[1]
+  upper_ci <- CI[2]
+  p_value <- get(object_name)$pval[2]
+  # split file name by "_" and remove ".rda"
+  file_parts <- strsplit(gsub("\\.rda", "", file_name), "_")[[1]]
+  # assign parts to variables
+  part1 <- file_parts[1]
+  part2 <- file_parts[2]
+  part3 <- file_parts[3]
+  part4 <- file_parts[5]
+  # print out the values
+  cat("File:", file_name, "\n")
+  cat("  Estimate:", estimate, "\n")
+  cat("  Lower CI:", lower_ci, "\n")
+  cat("  Upper CI:", upper_ci, "\n")
+  cat("  p-value:", p_value, "\n")
+  cat("  Part 1:", part1, "\n")
+  cat("  Part 2:", part2, "\n")
+  cat("  Part 3:", part3, "\n")
+  cat("  Part 4:", part4, "\n")
+  # add the results to the data frame
+  results <- rbind(results, data.frame(boot_strp = part1,
+                                       outcome = part3,
+                                       estimate = estimate,
+                                       lower_ci = lower_ci,
+                                       upper_ci = upper_ci,
+                                       p_value = p_value,
+                                       stringsAsFactors = FALSE))
+  # remove the object from the R environment to avoid conflicts with other objects (all objects saved as nb or boot)
+  rm(list = object_name)
+}
+
 ```
 
 
