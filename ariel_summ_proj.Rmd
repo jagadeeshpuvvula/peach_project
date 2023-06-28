@@ -7,7 +7,7 @@ output: pdf_document
 
 ```{r}
 library(pacman)
-pacman::p_load(tidyverse, janitor, reshape2, qgcomp)
+pacman::p_load(tidyverse, janitor, reshape2, qgcomp, gridExtra)
 path <- "~/Documents/PEACH_study/ariel_summ/"
 ```
 
@@ -105,6 +105,8 @@ ggplot(corr, aes(x = Var1, y = Var2, fill = value)) +
 
 #average levels during pregnancy vars 21-33
 ```{r}
+dat_imputed<- read_csv(paste0(path, "imputed_peach.csv"))
+
 dat_mod <- dat_imputed |>
   mutate(pss_avg = rowMeans(across(starts_with("pss14_")), na.rm = TRUE),
          bdi_avg = rowMeans(across(starts_with("bdi_")), na.rm = TRUE),
@@ -113,6 +115,33 @@ dat_mod <- dat_imputed |>
          mn_bld = rowMeans(across(starts_with("Mn_Blood")), na.rm = TRUE)) |>
   select(-c(21:28,31,32)) |>
   mutate(across(c(22, 23, 26:30), ~log10(.+0.0000001)))
+```
+
+#scatter plots with lm trend line with beta and p-value
+```{r}
+# List of x-variables
+x_variables <- c("pss_avg", "bdi_avg", "resil_avg", "pb_bld")
+
+# List of variables for y-axis
+y_variables <- c("weight_infant", "length_infant", "ga_birth")
+
+# List to store ggplot objects
+plot_list <- list()
+
+# create scatter plot of unique combination of x and y variables
+for (x_var in x_variables) {
+  for (y_var in y_variables) {
+    plot <- ggplot(dat_mod, aes_string(x = x_var, y = y_var)) +
+      geom_point(size = 2) +
+      stat_smooth(method = "lm", se = TRUE, fullrange = TRUE, colour = "gray50")+
+      theme_minimal()
+    
+    plot_list[[paste(x_var, y_var, sep = "_")]] <- plot
+  }
+}
+
+# Combine the ggplot objects using grid.arrange
+grid.arrange(grobs = plot_list, nrow = length(x_variables))
 ```
 
 #qgcomp function
@@ -137,62 +166,20 @@ qgcomp_func(outcomes = c("weight_infant", "length_infant", "ga_birth"),
             dat = dat_mod)
 ```
 
-#extract results from rda files
+#manual extraction of results
 ```{r}
-folder_location <- path
+load(paste0(path, "nb__ga_birth.rda"))
+load(paste0(path, "boot__ga_birth.rda"))
 
-# List files ending with ".rda" in the specified folder
-file_names <- list.files(folder_location, pattern = "\\.rda$")
+#only for files starts with nb_
+nb
+plot(nb)
 
-# create empty data frame to store the results
-results <- data.frame(file = character(),
-                      estimate = numeric(),
-                      lower_ci = numeric(),
-                      upper_ci = numeric(),
-                      stringsAsFactors = FALSE)
-
-#loops through all .rda files and extract estimates, CI & p-values
-for (file_name in file_names) {
-  # load the object from the file
-  load(file.path(folder_location, file_name))
-  # extract the object name using grep or grepl
-  object_name <- ls()[grep("^boot|^nb", ls())]
-  # extract the required information using the summary function and the object name
-  estimate <- get(object_name)$coef["psi1"]
-  CI <- get(object_name)$ci
-  lower_ci <- CI[1]
-  upper_ci <- CI[2]
-  p_value <- get(object_name)$pval[2]
-  # split file name by "_" and remove ".rda"
-  file_parts <- strsplit(gsub("\\.rda", "", file_name), "_")[[1]]
-  # assign parts to variables
-  part1 <- file_parts[1]
-  part2 <- file_parts[2]
-  part3 <- file_parts[3]
-  part4 <- file_parts[5]
-  # print out the values
-  cat("File:", file_name, "\n")
-  cat("  Estimate:", estimate, "\n")
-  cat("  Lower CI:", lower_ci, "\n")
-  cat("  Upper CI:", upper_ci, "\n")
-  cat("  p-value:", p_value, "\n")
-  cat("  Part 1:", part1, "\n")
-  cat("  Part 2:", part2, "\n")
-  cat("  Part 3:", part3, "\n")
-  cat("  Part 4:", part4, "\n")
-  # add the results to the data frame
-  results <- rbind(results, data.frame(boot_strp = part1,
-                                       outcome = part3,
-                                       estimate = estimate,
-                                       lower_ci = lower_ci,
-                                       upper_ci = upper_ci,
-                                       p_value = p_value,
-                                       stringsAsFactors = FALSE))
-  # remove the object from the R environment to avoid conflicts with other objects (all objects saved as nb or boot)
-  rm(list = object_name)
-}
-
+#only for files starts with boot_
+boot
+plot(boot)
 ```
+
 
 
 
