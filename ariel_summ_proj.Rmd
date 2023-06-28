@@ -57,6 +57,7 @@ summ<- dat_tbl |>
   pivot_longer(!c(pt_parity), names_to = "chemical", values_to = "conc")|>
   group_by(chemical) |>
   summarize(count_na = sum(is.na(conc)),
+            min_value = round(min(conc, na.rm=T),2),
             median_conc = round(median(conc, na.rm=T),2),
             percentile_25 = round(quantile(conc, 0.25, na.rm=T),2),
             percentile_75 = round(quantile(conc, 0.75, na.rm=T),2))
