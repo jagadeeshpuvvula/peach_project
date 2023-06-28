@@ -73,8 +73,6 @@ dat_imputed<- dat |>
          sex_infant= as.factor(if_else(is.na(sex_infant), "Male", sex_infant))
          )
 
-
-
 write_csv(dat_imputed, paste0(path, "imputed_peach.csv"))
 ```
 
@@ -153,8 +151,8 @@ qgcomp_func<- function(outcomes, dat, folder_path, mixture) {
        
         nb <- qgcomp.noboot(formula, expnms = mixture, data = dat, family= gaussian(), q=4)
         boot <- qgcomp.boot(formula, expnms = mixture, data = dat, family= gaussian(), q=4, B = 200, seed = 2022)
-        save(nb, file = paste0(folder_path, "/", "nb_", "_", outcome, ".rda"))
-        save(boot, file = paste0(folder_path, "/", "boot_", "_", outcome, ".rda"))
+        save(nb, file = paste0(folder_path, "/", "nb_", outcome, ".rda"))
+        save(boot, file = paste0(folder_path, "/", "boot_", outcome, ".rda"))
   }
 }
 ```
@@ -169,8 +167,8 @@ qgcomp_func(outcomes = c("weight_infant", "length_infant", "ga_birth"),
 
 #manual extraction of results
 ```{r}
-load(paste0(path, "nb__ga_birth.rda"))
-load(paste0(path, "boot__ga_birth.rda"))
+load(paste0(path, "nb_ga_birth.rda"))
+load(paste0(path, "boot_ga_birth.rda"))
 
 #only for files starts with nb_
 nb
