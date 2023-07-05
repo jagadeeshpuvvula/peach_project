@@ -102,4 +102,21 @@ dat_with_dep_score<- left_join(dat_existing, dat, by="studyid")
 write_csv(dat_with_dep_score, "~/Documents/PEACH_study/clem_raw_dat/ariel_exp_qn_full.csv")
 ```
 
+```{r}
+dat<- read_csv("~/Documents/PEACH_study/clem_raw_dat/ariel_exp_qn_full.csv") |>
+  mutate(race = case_when(
+    pt_race___1 == "Checked" ~ "nhsp_black",
+    pt_race___2 == "Checked" ~ "white",
+    pt_race___3 == "Checked" ~ "asian",
+    pt_race___4 == "Checked" ~ "latino",
+    pt_race___5 == "Checked" ~ "native_havi",
+    pt_race___6 == "Checked" ~ "ameri_ind",
+    pt_race___777 == "Checked" ~ "other",
+    pt_race___888 == "Checked" ~ "unkn",
+    TRUE ~ "NA" )) |>
+  mutate_if(is.character, as.factor)
+    
+```
+
+
 
