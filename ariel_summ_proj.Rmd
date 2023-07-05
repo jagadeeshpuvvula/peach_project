@@ -147,7 +147,7 @@ grid.arrange(grobs = plot_list, nrow = length(x_variables))
 ```{r}
 qgcomp_func<- function(outcomes, dat, folder_path, mixture) {
   for(outcome in outcomes){
-    formula <- as.formula(paste(outcome, "~ pss_avg+ bdi_avg+ resil_avg+ pb_bld+ mn_bld+ Pb_Urine_V1+ As_Urine_V1+ Mo_Urine_V1+ ","age + bmi+ pt_parity+ sex_infant+ pt_education+ household_income+ race+ highway+ greenspace+ bluespace+ type_house + year_house"))
+    formula <- as.formula(paste(outcome, "~ pss_avg+ bdi_avg+ resil_avg+ pb_bld+ mn_bld+ Pb_Urine_V1+ As_Urine_V1+ Mo_Urine_V1+ ","age + bmi+ sex_infant+ pt_education+ household_income+ race"))
        
         nb <- qgcomp.noboot(formula, expnms = mixture, data = dat, family= gaussian(), q=4)
         boot <- qgcomp.boot(formula, expnms = mixture, data = dat, family= gaussian(), q=4, B = 200, seed = 2022)
@@ -180,5 +180,63 @@ plot(boot)
 ```
 
 
+#Disparities regression model
+```{r}
+dat_imputed<- read_csv(paste0(path, "imputed_peach.csv"))
+```
+
+```{r}
+disparities_lm <- function(data, cat_vars, cont_vars) {
+  result_df <- data.frame()  # initialize an empty dataframe for storing results
+
+  for (cat_var in cat_vars) {
+    for (cont_var in cont_vars) {
+      # check if the continuous variable is numeric
+      if (is.numeric(data[[cont_var]])) {
+        # create a formula for linear regression including the specified variables
+        formula <- as.formula(paste(cont_var, "~", cat_var, "+ pss_avg + bdi_avg + resil_avg + pb_bld + mn_bld + Pb_Urine_V1 + As_Urine_V1 + Mo_Urine_V1"))
+        
+        # fit the linear regression model
+        lm_model <- lm(formula, data = data)
+        
+        # extract the relevant information from the linear regression model
+        lm_coefficients <- summary(lm_model)$coefficients
+        lm_beta <- lm_coefficients[2]
+        lm_conf_int <- paste(round(confint(lm_model)[2, ], 2), collapse = " - ")
+        lm_p_val<- summary(lm_model)$coefficient[2,"Pr(>|t|)"]
+        
+        # create a row for the result dataframe
+        result_row <- data.frame(cat_var = cat_var,
+                                 cont_var = cont_var,
+                                 lm_beta = lm_beta,
+                                 lm_conf_int = paste(lm_conf_int),
+                                 lm_p_val= lm_p_val)
+        # add the row to the result dataframe
+        result_df <- rbind(result_df, result_row)
+      } else {
+        # if the continuous variable is not numeric, print a warning message
+        warning(paste0("Variable '", cont_var, "' is not numeric and will be skipped."))
+      }
+    }
+  }
+  return(result_df)
+}
+```
+
+```{r}
+dat_mod <- dat_mod |>
+  mutate_if(is.character, as.factor)
+
+#relevel variables - reference categories
+dat_mod$pt_education <- relevel(dat_mod$pt_education, ref = "bach-or-abv")
+dat_mod$race <- relevel(dat_mod$race, ref = "white")
+dat_mod$household_income <- relevel(dat_mod$household_income, ref = "abv_80k")
+
+
+lm_res<- disparities_lm(data = dat_mod,
+               cat_vars = c("race", "pt_education", "household_income"),
+               cont_vars = c("weight_infant", "length_infant", "ga_birth"))
+
+```
 
 
