@@ -181,9 +181,6 @@ plot(boot)
 
 
 #Disparities regression model
-```{r}
-dat_imputed<- read_csv(paste0(path, "imputed_peach.csv"))
-```
 
 ```{r}
 disparities_lm <- function(data, cat_vars, cont_vars) {
@@ -227,16 +224,26 @@ disparities_lm <- function(data, cat_vars, cont_vars) {
 dat_mod <- dat_mod |>
   mutate_if(is.character, as.factor)
 
-#relevel variables - reference categories
+#re-level variables - reference categories
 dat_mod$pt_education <- relevel(dat_mod$pt_education, ref = "bach-or-abv")
 dat_mod$race <- relevel(dat_mod$race, ref = "white")
 dat_mod$household_income <- relevel(dat_mod$household_income, ref = "abv_80k")
 
 
 lm_res<- disparities_lm(data = dat_mod,
-               cat_vars = c("race", "pt_education", "household_income"),
+               cat_vars = c("race", "pt_education", "household_income", "mold_mildew", "type_house", "year_house", 
+                            "highway","stove","water", "moisture", "floors", "vacuum", "greenspace", "bluespace") ,
                cont_vars = c("weight_infant", "length_infant", "ga_birth"))
 
 ```
 
+#practice
+```{r}
+lm_p<- lm(weight_infant~  race + pss_avg + bdi_avg + resil_avg + pb_bld + mn_bld + Pb_Urine_V1 + As_Urine_V1 + Mo_Urine_V1, 
+          data = dat_mod)
+summary(lm_p)
+
+lm_p2<- lm(weight_infant~  race , 
+          data = dat_mod)
+```
 
