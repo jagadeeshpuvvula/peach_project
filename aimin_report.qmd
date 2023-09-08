@@ -158,8 +158,8 @@ fit_gam_combinations <- function(exposure_vars, outcome_vars, covariates, data) 
 }
 
 
-fit_gam_combinations(exposure_vars = c("As_Urine_V1", "Mo_Urine_V1", "Pb_Blood_V1",
-                                       "Mn_Blood_V1", "Mo_Blood_V1"),
+fit_gam_combinations(exposure_vars = c("As_Urine_V1", "Mo_Urine_V1", 
+                                       "Pb_Blood_V1", "Mn_Blood_V1", "Mo_Blood_V1"),
                      outcome_vars = c("weight_infant", "ga_birth"), 
                      covariates = c("age",  "pt_education", "race"), 
                      data = dat_plt)
