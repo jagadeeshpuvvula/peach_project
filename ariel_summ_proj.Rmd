@@ -15,7 +15,9 @@ path <- "~/Documents/PEACH_study/ariel_summ/"
 ```{r}
 dat<- read_csv(paste0(path, "ariel_exp_qn_full.csv")) |>
   select(c(2:13, 15:17, 19:22, 24:43, 142, 165, 251, 268, 291, 321, 
-           starts_with("pb"), starts_with("as_urine"), starts_with("mn_blood"), starts_with("mo_urine")))|>
+           starts_with("As_Urine_V1"), starts_with("Mo_Urine_V1"), 
+           starts_with("Pb_Blood_V1"), starts_with("Mn_Blood_V1"), 
+           starts_with("Mo_Blood_V1")))|>
   rename(bdi_v1="total_score", resil_v1 = "score_overall_resilience_mean", 
          bdi_v3="total_score_v3", resil_v3="score_overall_resili_v_36") |>
   mutate(race = case_when(
@@ -45,16 +47,16 @@ dat<- read_csv(paste0(path, "ariel_exp_qn_full.csv")) |>
   mutate(highway = if_else(highway == "More than 1 mile" , "gt_1mile", "lt_1mile")) |>
   mutate(bmi = (prepreg_weight * 0.453592) / (((height * 30.48 + height_2 * 2.54) / 100) ^ 2))  |>
   select(-c(3:12,18,27:34)) |>
-  mutate(across(c(2:16, 18, 34), as.factor)) |>
-  mutate(across(-c(2:16, 18, 34), ~round(as.numeric(.), 2)))
+  mutate_if(is.character, as.factor) |>
+  mutate_if(is.numeric, ~round(., 2))
 ```
 
 #summary table
 ```{r}
-dat_tbl<- dat |> select(-c(2:15, 18, 34))
+dat_tbl<- dat |> select(c("year_house", where(is.numeric)))
 
 summ<- dat_tbl |>
-  pivot_longer(!c(pt_parity), names_to = "chemical", values_to = "conc")|>
+  pivot_longer(!c(year_house), names_to = "chemical", values_to = "conc")|>
   group_by(chemical) |>
   summarize(count_na = sum(is.na(conc)),
             min_value = round(min(conc, na.rm=T),2),
@@ -66,7 +68,7 @@ summ<- dat_tbl |>
 #imputing missing data with min
 ```{r}
 #imputing missing values with minimum values
-dat_imputed<- dat |>
+dat_imputed<- dat|>
   mutate(across(where(is.numeric), ~replace(., is.na(.), min(., na.rm = TRUE))))  |>
   mutate(highway= as.factor(if_else(is.na(highway), "lt_1mile", highway)),
          bluespace= as.factor(if_else(is.na(bluespace), "Rarely (< 1 time per month)", bluespace)),
@@ -80,11 +82,11 @@ write_csv(dat_imputed, paste0(path, "imputed_peach.csv"))
 #correlation coefficients 
 ```{r}
 dat_corr<- dat_imputed |> 
-  select(-c(2:16, 18, 34)) |>
-  mutate_at(vars(11:17), ~log10(.+0.0000001)) |>
-  rename_with(~ paste0("log_", .x), 11:17)
+  select(where(is.numeric)) |>
+  mutate_at(vars(11:15), ~log10(.+0.0000001)) |>
+  rename_with(~ paste0("log_", .x), 11:15)
 
-corr <- cor(dat_corr, method = "pearson") |>
+corr <- cor(dat_corr, method = "pearson", use = "complete.obs") |>
   melt()
 
 
@@ -231,7 +233,7 @@ dat_mod$household_income <- relevel(dat_mod$household_income, ref = "abv_80k")
 
 
 lm_res<- disparities_lm(data = dat_mod,
-               cat_vars = c("race", "pt_education", "household_income", "mold_mildew", "type_house", "year_house", 
+               cat_vars = c("race", "pt_education", "hous. ehold_income", "mold_mildew", "type_house", "year_house", 
                             "highway","stove","water", "moisture", "floors", "vacuum", "greenspace", "bluespace") ,
                cont_vars = c("weight_infant", "length_infant", "ga_birth"))
 
