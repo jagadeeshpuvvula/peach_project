@@ -1,0 +1,167 @@
+---
+title: "PEACH progress report"
+author: "Aimin Chen"
+date: "09/08/2023"
+format: docx
+editor: visual
+---
+
+```{r, echo=FALSE}
+library(pacman)
+pacman::p_load(tidyverse, janitor, reshape2, qgcomp, gridExtra, knitr)
+path <- "~/Documents/PEACH_study/ariel_summ/"
+```
+
+```{r, include=FALSE}
+dat<- read_csv(paste0(path, "ariel_exp_qn_full.csv")) |>
+  select(c(2:13, 15:17, 19:22, 24:43, 142, 165, 251, 268, 291, 321, 
+           starts_with("As_Urine_V1"), starts_with("Mo_Urine_V1"), 
+           starts_with("Pb_Blood_V1"), starts_with("Mn_Blood_V1"), 
+           starts_with("Mo_Blood_V1")))|>
+  rename(bdi_v1="total_score", resil_v1 = "score_overall_resilience_mean", 
+         bdi_v3="total_score_v3", resil_v3="score_overall_resili_v_36") |>
+  mutate(race = case_when(
+    pt_race___1 == "Checked" ~ "nhsp_black",
+    pt_race___2 == "Checked" ~ "white",
+    pt_race___3 == "Checked" ~ "asian",
+    pt_race___4 == "Checked" ~ "latino",
+    pt_race___5 == "Checked" ~ "native_havi",
+    pt_race___6 == "Checked" ~ "ameri_ind",
+    pt_race___777 == "Checked" ~ "other",
+    pt_race___888 == "Checked" ~ "unkn",
+    TRUE ~ "NA" )) |>
+  mutate(race = if_else(race == "white", "white", "non-white")) |>
+  mutate(pt_ethni = if_else(pt_ethni == "Hispanic / Latino", "hispanic", "non-hispanic")) |>
+  mutate(pt_education = if_else(pt_education == "Bachelor's degree (e.g. BA, BS)" | 
+                                  pt_education == "Master's degree (e.g. MA, MS, MEd)"| 
+                                  pt_education == "Doctorate (e.g. PhD, EdD)", "bach-or-abv", "lt-bach")) |>
+  mutate(household_income = case_when(
+    household_income == "< $20,000" ~ "lt_80k",
+    household_income == "$20,000-$39,999" ~ "lt_80k",
+    household_income == "$40,000-$79,999" ~ "lt_80k",
+    household_income == "$80,000-$119,999" ~ "abv_80k",
+    household_income == "$120,000-$159,999" ~ "abv_80k",
+    household_income == ">$160,000" ~ "abv_80k",
+    TRUE ~ as.factor(household_income)  # Keep other values unchanged
+    ))|>
+  mutate(highway = if_else(highway == "More than 1 mile" , "gt_1mile", "lt_1mile")) |>
+  mutate(bmi = (prepreg_weight * 0.453592) / (((height * 30.48 + height_2 * 2.54) / 100) ^ 2))  |>
+  select(-c(3:12,18,27:34)) |>
+  mutate_if(is.character, as.factor) |>
+  mutate_if(is.numeric, ~round(., 2))
+```
+
+```{r, echo=FALSE}
+dat_tbl<- dat |> select(c("year_house", "As_Urine_V1", "Mo_Urine_V1","Pb_Blood_V1", 
+                          "Mn_Blood_V1", "Mo_Blood_V1","weight_infant","ga_birth"))
+
+tbl <- dat_tbl |>
+  pivot_longer(!c(year_house), names_to = "chemical", values_to = "conc")|>
+  group_by(chemical) |>
+  summarize(count_na = sum(is.na(conc)),
+            min_value = round(min(conc, na.rm=T),2),
+            median_conc = round(median(conc, na.rm=T),2),
+            percentile_25 = round(quantile(conc, 0.25, na.rm=T),2),
+            percentile_75 = round(quantile(conc, 0.75, na.rm=T),2)) 
+kable(tbl, caption = "Summary table")
+```
+
+```{r, echo=FALSE, fig.cap="Spearman correlation between chemical biomarkers and newborn outcomes"}
+library(tidyverse)
+
+dat_corr<- dat |>
+  mutate_at(vars(27:31), ~log10(.+0.0000001)) |>
+  rename_with(~ paste0("log_", .x), 27:31) |> 
+  select(c(17,19,27:31)) 
+
+corr <- cor(dat_corr, method = "pearson", use = "complete.obs") |>
+  melt()
+
+
+ggplot(corr, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(colour = "black", size = 8),
+        strip.text.x = element_text(colour = "black", size = 6.5),
+        strip.text.y = element_text(colour = "black", size = 6.5),
+        legend.position = "bottom", legend.box = "horizontal",
+        legend.key.width = unit(0.8, "cm"),
+        legend.key.height = unit(0.5, "cm")) +
+  labs(title = "", x = "", y = "") +
+  geom_text(aes(label = round(value, 2)), color = "black", size = 3)+
+  scale_fill_gradient2(low = "red", high = "royalblue", 
+                       midpoint = 0, name= "Correlation coefficient",
+                       guide = guide_colorbar(title.position = "left",
+                                              title.hjust = 1,
+                                              title.vjust = 1))
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE, fig.cap= "Scatter plots between chemical biomarkers and newborn outcomes with GAM trend line - not adjusted for covariates", fig.width=8, fig.height=10}
+dat_plt<- dat|>
+  select(c("As_Urine_V1", "Mo_Urine_V1","Pb_Blood_V1", "Mn_Blood_V1", "Mo_Blood_V1",
+           "weight_infant", "ga_birth", "age", "pt_education","race")) |>
+  mutate(age = ifelse(is.na(age), median(age, na.rm = TRUE), age)) |>
+  drop_na() |>
+  mutate_at(vars(1:5), ~log10(.+0.0000001))
+
+create_scatter_plots <- function(x_vars, y_vars, data) {
+  plot_list <- list()
+  
+  for (x_var in x_vars) {
+    for (y_var in y_vars) {
+      plot <- ggplot(data, aes_string(x = x_var, y = y_var)) +
+        geom_point(size = 2) +
+        stat_smooth(method = "gam", 
+                    formula = y ~ s(x, bs="cr", k=10),
+                    se = TRUE,  colour = "gray50") +
+        theme_minimal()
+      
+      plot_list[[paste(x_var, y_var, sep = "_")]] <- plot
+    }
+  }
+
+  grid.arrange(grobs = plot_list, nrow = length(x_vars))
+}
+
+create_scatter_plots(x_vars = c("As_Urine_V1", "Mo_Urine_V1", 
+                 "Pb_Blood_V1", "Mn_Blood_V1", "Mo_Blood_V1"), 
+                 y_vars = c("weight_infant", "ga_birth"), 
+                 data = dat_plt)
+```
+
+#### Generalized Additive model - Results
+
+birth outcome \~ s(metals) + maternal_age + education + race
+
+```{r, echo= FALSE, warning=FALSE, fig.height=5, fig.width=5}
+library(mgcv)
+
+fit_gam_combinations <- function(exposure_vars, outcome_vars, covariates, data) {
+  covariate_formula <- paste(covariates, collapse = " + ")
+  
+  for (exposure_var in exposure_vars) {
+    for (outcome_var in outcome_vars) {
+      formula <- as.formula(paste(outcome_var, "~ s(", exposure_var, ", bs='cr', k=3) + ", covariate_formula, sep = ""))
+      model <- gam(formula, data = data, method = "REML", family = gaussian)
+      
+      # Plot the GAM output
+      plot.gam(model, rug = T, residuals = T, 
+               shade = T, shade.col = "gray90",
+               shift = coef(model)[1],
+               ylab = outcome_var)
+      #Print the model summary
+      #print(kable(coef(model)))
+      #gam.check(model)
+    }
+  }
+}
+
+
+fit_gam_combinations(exposure_vars = c("As_Urine_V1", "Mo_Urine_V1", "Pb_Blood_V1",
+                                       "Mn_Blood_V1", "Mo_Blood_V1"),
+                     outcome_vars = c("weight_infant", "ga_birth"), 
+                     covariates = c("age",  "pt_education", "race"), 
+                     data = dat_plt)
+
+```
